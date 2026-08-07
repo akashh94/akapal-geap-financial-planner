@@ -1,0 +1,15 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.ruff_cache/
+
+# Local env / secrets
+.env
+.env.local
+
+# Logs
+*.log
