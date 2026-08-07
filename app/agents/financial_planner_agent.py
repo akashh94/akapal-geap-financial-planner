@@ -1,5 +1,6 @@
 """Financial Planning / Wealth Advisor agent (ADK)."""
 
+import logging
 import os
 
 from google.adk.agents import LlmAgent
@@ -9,6 +10,8 @@ from google.adk.tools.mcp_tool import McpToolset, SseConnectionParams
 from app.config.models import build_model
 from app.prompts.planner_prompt import PLANNER_PROMPT
 from app.tools import planning_calculator
+
+logger = logging.getLogger(__name__)
 
 _calc_tools = [
     FunctionTool(planning_calculator.future_value),
@@ -28,6 +31,11 @@ if mcp_url := os.getenv("MCP_PORTFOLIO_URL"):
                 timeout=10.0,
             ),
         )
+    )
+else:
+    logger.warning(
+        "MCP_PORTFOLIO_URL is not set — portfolio data tools are disabled. "
+        "The planner will answer without live portfolio context."
     )
 
 financial_planner_agent = LlmAgent(

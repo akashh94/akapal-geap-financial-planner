@@ -23,7 +23,6 @@ gcloud config set project "$PROJECT_ID"
 # running if you want the deployed agent to use a different model/location.
 export AGENT_MODEL="${AGENT_MODEL:-gemini-3.5-flash}"
 export MODEL_LOCATION="${MODEL_LOCATION:-global}"
-
 if ! command -v uv >/dev/null 2>&1; then
   echo "uv not found; installing..."
   curl -LsSf https://astral.sh/uv/install.sh | sh
