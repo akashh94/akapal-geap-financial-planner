@@ -6,10 +6,25 @@ Thumbs.db
 __pycache__/
 *.pyc
 .ruff_cache/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
 
 # Local env / secrets
 .env
-.env.local
+.env.*
+!.env.example
 
 # Logs
 *.log
+
+# IDE / tooling
+.commandcode/
+
+# Personal build/deploy scripts (personal GCP project)
+build.personal.sh
+deploy.personal.sh
+deploy.personal.env

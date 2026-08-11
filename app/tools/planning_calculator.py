@@ -32,7 +32,7 @@ def future_value(
         present_value: Current amount invested.
         rate_per_period: Periodic interest rate (e.g. 0.05/12 for monthly).
         n_periods: Number of periods.
-        payment: Periodic contribution (positive = money in).
+        payment: Periodic contribution (positive = money in, negative = money out).
         payment_at_beginning: True if payments occur at the start of each period.
     """
     if rate_per_period == 0:
@@ -95,45 +95,38 @@ def n_periods(
     payment: float,
     future_value_: float,
 ) -> float:
-    """Number of periods to reach ``future_value_`` from ``present_value``.
+    """Number of periods to reach a goal (used for 'when can I retire').
 
-    ``payment`` is positive for money in (contributions). Returns
-    ``float('inf')`` when the goal is not reachable (growth/contributions
-    never close the gap), and raises ``ValueError`` for degenerate inputs
-    (zero payment on a zero balance, or unreachable with payment=0).
+    Closed-form NPER for payments at the start of each period, matching
+    ``future_value``'s ``payment_at_beginning`` convention: a positive
+    payment is money flowing into the account, a negative payment is money
+    flowing out (e.g. retirement withdrawals).
     """
     if rate_per_period == 0:
-        denom = payment
-        if denom == 0:
+        if payment == 0:
             raise ValueError(
-                "Cannot solve for n_periods with zero rate and zero payment."
+                "Cannot determine periods with no rate and no payment."
             )
-        return _round2((future_value_ - present_value) / denom)
+        return _round2((future_value_ - present_value) / payment)
     if payment == 0:
-        if present_value <= 0:
-            raise ValueError(
-                "Cannot solve for n_periods with zero payment and non-positive present value."
-            )
-        if future_value_ <= present_value:
-            return float("inf")
+        if present_value == 0:
+            return 0.0
         return _round2(
-            math.log(future_value_ / present_value) / math.log(1 + rate_per_period)
+            math.log(future_value_ / present_value)
+            / math.log(1 + rate_per_period)
         )
-    # Standard NPER from the annuity formula (PMT positive = money in):
-    #   FV = PV*(1+r)^n + PMT*((1+r)^n - 1)/r
-    # => FV*r = PV*r*(1+r)^n + PMT*(1+r)^n - PMT
-    # => (1+r)^n * (PV*r + PMT) = FV*r + PMT
-    # => (1+r)^n = (FV*r + PMT) / (PV*r + PMT)
-    # A non-positive ratio means the goal is never reached: e.g. growth
-    # outpaces contributions (savings), or the portfolio grows faster than it
-    # is withdrawn (never depletes). Both numerator and denominator can be
-    # negative together (valid depletion), so check the ratio.
-    num = future_value_ * rate_per_period + payment
-    den = present_value * rate_per_period + payment
-    ratio = num / den
-    if ratio <= 0:
-        return float("inf")
-    return _round2(math.log(ratio) / math.log(1 + rate_per_period))
+    # n = log((payment*(1+r) + fv*r) / (payment*(1+r) + pv*r)) / log(1+r).
+    # A positive n requires the ratio to exceed 1, which means the two
+    # terms must share a sign and the numerator's magnitude must be larger.
+    num = payment * (1 + rate_per_period) + future_value_ * rate_per_period
+    den = payment * (1 + rate_per_period) + present_value * rate_per_period
+    if num * den <= 0 or abs(num) <= abs(den):
+        raise ValueError(
+            "Goal is not reachable with the given payment and rate."
+        )
+    return _round2(
+        math.log(num / den) / math.log(1 + rate_per_period)
+    )
 
 
 def retirement_projection(
@@ -167,7 +160,7 @@ def retirement_projection(
         present_value=current_savings,
         rate_per_period=monthly_rate,
         n_periods=n_months,
-        payment=monthly_contribution,  # positive = money in
+        payment=monthly_contribution,
         payment_at_beginning=True,
     )
 
@@ -186,13 +179,15 @@ def retirement_projection(
     if monthly_withdrawal <= 0:
         months = float("inf")
     else:
-        months = n_periods(
-            present_value=balance_at_retirement,
-            rate_per_period=monthly_rate,
-            payment=-monthly_withdrawal,  # money out
-            future_value_=0.0,
-        )
-        if months == float("inf"):
+        try:
+            months = n_periods(
+                present_value=balance_at_retirement,
+                rate_per_period=monthly_rate,
+                payment=-monthly_withdrawal,
+                future_value_=0.0,
+            )
+        except ValueError:
+            # Withdrawals never deplete the balance (returns outpace spending).
             months = float("inf")
     years_nest_egg_lasts = months if months == float("inf") else months / 12.0
     retirement_span = max(0, life_expectancy - retirement_age)
@@ -219,7 +214,7 @@ def savings_goal_projection(
         present_value=current_savings,
         rate_per_period=expected_annual_return / 12.0,
         n_periods=years * 12,
-        payment=monthly_contribution,  # positive = money in
+        payment=monthly_contribution,
         payment_at_beginning=True,
     )
     return {
