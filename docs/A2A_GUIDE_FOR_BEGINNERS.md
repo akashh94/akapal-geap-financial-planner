@@ -131,8 +131,8 @@ calls it with the question as the argument.
 
 ### Step 2 — The tool builds an A2A client
 ```python
-headers = _auth_headers()          # Bearer token from google.auth
-card = await fetch_agent_card()    # httpx GET of FINANCIAL_PLANNER_URL
+headers = _auth_headers()  # Bearer token from google.auth
+card = await fetch_agent_card()  # httpx GET of FINANCIAL_PLANNER_URL
 # The card advertises the container's internal URL — rewrite it to the
 # public Agent Engine passthrough base before sending.
 for interface in card.supported_interfaces:

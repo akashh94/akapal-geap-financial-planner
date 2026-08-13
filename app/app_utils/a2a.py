@@ -64,6 +64,7 @@ def install_request_base_url_middleware(app: FastAPI) -> None:
     agent-card route uses the captured value to advertise a JSON-RPC URL the
     client can actually reach.
     """
+
     @app.middleware("http")
     async def _capture_request_base_url(
         request: Request, call_next: Callable

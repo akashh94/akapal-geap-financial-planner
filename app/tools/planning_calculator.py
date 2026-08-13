@@ -104,16 +104,13 @@ def n_periods(
     """
     if rate_per_period == 0:
         if payment == 0:
-            raise ValueError(
-                "Cannot determine periods with no rate and no payment."
-            )
+            raise ValueError("Cannot determine periods with no rate and no payment.")
         return _round2((future_value_ - present_value) / payment)
     if payment == 0:
         if present_value == 0:
             return 0.0
         return _round2(
-            math.log(future_value_ / present_value)
-            / math.log(1 + rate_per_period)
+            math.log(future_value_ / present_value) / math.log(1 + rate_per_period)
         )
     # n = log((payment*(1+r) + fv*r) / (payment*(1+r) + pv*r)) / log(1+r).
     # A positive n requires the ratio to exceed 1, which means the two
@@ -121,12 +118,8 @@ def n_periods(
     num = payment * (1 + rate_per_period) + future_value_ * rate_per_period
     den = payment * (1 + rate_per_period) + present_value * rate_per_period
     if num * den <= 0 or abs(num) <= abs(den):
-        raise ValueError(
-            "Goal is not reachable with the given payment and rate."
-        )
-    return _round2(
-        math.log(num / den) / math.log(1 + rate_per_period)
-    )
+        raise ValueError("Goal is not reachable with the given payment and rate.")
+    return _round2(math.log(num / den) / math.log(1 + rate_per_period))
 
 
 def retirement_projection(
@@ -191,7 +184,9 @@ def retirement_projection(
             months = float("inf")
     years_nest_egg_lasts = months if months == float("inf") else months / 12.0
     retirement_span = max(0, life_expectancy - retirement_age)
-    sustainable = years_nest_egg_lasts == float("inf") or years_nest_egg_lasts >= retirement_span
+    sustainable = (
+        years_nest_egg_lasts == float("inf") or years_nest_egg_lasts >= retirement_span
+    )
 
     return {
         "balance_at_retirement": balance_at_retirement,

@@ -20,6 +20,15 @@ dependencies = [
     "mcp>=1.24,<2",
 ]
 
+[project.optional-dependencies]
+# Consumed by `agents-cli lint`, which runs `uv sync --dev --extra lint` first.
+lint = [
+    "ruff",
+    "codespell",
+    "ty",
+    "mypy",
+]
+
 [tool.setuptools.packages.find]
 include = ["app*"]
 

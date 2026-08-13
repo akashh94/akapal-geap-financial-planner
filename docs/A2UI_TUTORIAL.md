@@ -94,7 +94,11 @@ from a2ui.a2a.extension import get_a2ui_agent_extension
 
 AgentCapabilities(
     streaming=True,
-    extensions=[get_a2ui_agent_extension(version, accepts_inline_catalogs, supported_catalog_ids)],
+    extensions=[
+        get_a2ui_agent_extension(
+            version, accepts_inline_catalogs, supported_catalog_ids
+        )
+    ],
 )
 ```
 
@@ -133,7 +137,9 @@ inference_format = DirectJsonFormat(
 
 # 2. Build TWO agents: one for text, one that emits A2UI
 text_agent = LlmAgent(model=..., instruction=get_text_prompt(), tools=[...])
-ui_agent   = LlmAgent(model=..., instruction=inference_format.generate_system_prompt(...), tools=[...])
+ui_agent = LlmAgent(
+    model=..., instruction=inference_format.generate_system_prompt(...), tools=[...]
+)
 
 # 3. On each request, pick based on whether the client asked for the A2UI extension
 if active_ui_version:
