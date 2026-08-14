@@ -17,7 +17,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
 # Env file: first CLI arg, else deploy.personal.env (gitignored), else geap.deploy.env.
-ENV_FILE="${1:-deploy.personal.env}"
+ENV_FILE="${1:-geap.deploy.env}"
 if [[ -f "$ENV_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$ENV_FILE"
