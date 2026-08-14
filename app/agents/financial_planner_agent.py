@@ -4,7 +4,7 @@ import logging
 import os
 
 from google.adk.agents import LlmAgent
-from google.adk.tools import FunctionTool
+from google.adk.tools import BaseToolset, FunctionTool
 from google.adk.tools.mcp_tool import McpToolset, SseConnectionParams
 
 from app.config.models import build_model
@@ -22,7 +22,7 @@ _calc_tools = [
     FunctionTool(planning_calculator.savings_goal_projection),
 ]
 
-_tools = list(_calc_tools)
+_tools: list[BaseToolset] = list(_calc_tools)
 if mcp_url := os.getenv("MCP_PORTFOLIO_URL"):
     _tools.append(
         McpToolset(

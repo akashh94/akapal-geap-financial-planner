@@ -20,6 +20,7 @@ The deployed agent is reachable over A2A at:
 from __future__ import annotations
 
 import os
+from typing import cast
 
 import vertexai
 from a2a.server.tasks import InMemoryTaskStore
@@ -33,11 +34,9 @@ from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from vertexai.agent_engines.templates.a2a import A2aAgent, create_agent_card
 from vertexai.preview.reasoning_engines import ReasoningEngine
+from vertexai.reasoning_engines import _reasoning_engines
 
 from app.agents.financial_planner_agent import financial_planner_agent
-
-#: Env vars the planner agent reads at runtime (model + portfolio MCP).
-_PLANNER_ENV_VARS = ("AGENT_MODEL", "MODEL_LOCATION", "MCP_PORTFOLIO_URL")
 
 
 def _build_runner() -> Runner:
@@ -118,12 +117,11 @@ def main() -> None:
         staging_bucket=staging_bucket,
     )
 
-    # Copy the planner's runtime env into the deployed engine's environment.
-    env_vars = {name: os.getenv(name, "") for name in _PLANNER_ENV_VARS}
-
     a2a_agent = _build_a2a_agent()
+    # ty can't see that A2aAgent satisfies the Queryable protocol at runtime.
+    a2a_agent_queryable = cast(_reasoning_engines.Queryable, a2a_agent)
     engine = ReasoningEngine.create(
-        a2a_agent,
+        a2a_agent_queryable,
         display_name=os.getenv("AGENT_DISPLAY_NAME", "financial-planner"),
         requirements=[
             "google-adk[gcp,db,a2a]",
@@ -133,7 +131,6 @@ def main() -> None:
             "mcp>=1.24,<2",
         ],
         extra_packages=["."],  # package this repo's app/ source
-        env_vars=env_vars,  # type: ignore[arg-type]  # create() accepts env_vars
     )
     print(f"Deployed: {engine.resource_name}")
     print(
