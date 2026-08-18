@@ -28,3 +28,7 @@ env/
 build.personal.sh
 deploy.personal.sh
 deploy.personal.env
+deploy.personal.cloudrun.sh
+
+# Model B (deprecated — Model A / Cloud Run is the live path)
+deploy_model_b.sh
