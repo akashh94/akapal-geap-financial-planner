@@ -12,18 +12,18 @@ The guiding principle for each entry:
 
 ---
 
-## 1. `mcp` 2.0.0 broke `McpToolset` import (planner, pre-deploy)
+## 1. `mcp` 2.0.0 broke `MCPToolset` import (planner, pre-deploy)
 
 **Symptom**
 ```python
 import app.agent
-# ImportError: cannot import name 'McpToolset' from 'google.adk.tools.mcp_tool'
+# ImportError: cannot import name 'MCPToolset' from 'google.adk.tools.mcp_tool'
 ```
 
 **Layer:** Dependency resolution (local environment).
 
 **Reasoning (first principles)**
-- `McpToolset` is imported unconditionally at module load in
+- `MCPToolset` is imported unconditionally at module load in
   `app/agents/financial_planner_agent.py` — so the agent can't even import.
 - ADK 2.6.2 requires `mcp>=1.24,<2` (verified via `importlib.metadata.requires('google-adk')`),
   and its `mcp_toolset.py` does `from mcp.shared.session import ProgressFnT`.
@@ -267,27 +267,80 @@ shapes depending on executor version — collect from all of them.
 
 ---
 
+## 10. Model B deploy "succeeded" but the A2A card 404s (zero registered operations)
+
+**Symptom**
+- `ReasoningEngine.create()` returned success ("ReasoningEngine created",
+  operation `done: true`), but every A2A path 404'd:
+  `v1beta1/.../a2a/.well-known/agent-card.json` and
+  `reasoningEngines/v1/.../api/a2a/financial_planner/...` both returned 404.
+- The deploy log showed repeated warnings:
+  ```
+  failed to generate schema for on_message_send: `on_message_send` is not fully
+  defined; you should define `SendMessageRequest`, then call
+  `on_message_send.model_rebuild()`.
+  ```
+- The deployed engine's `operationSchemas` was empty.
+
+**Layer:** Deployment packaging (SDK schema generation).
+
+**Reasoning (first principles)**
+- `ReasoningEngine.create()` registers the `A2aAgent`'s `on_*` methods by
+  generating a pydantic schema per method
+  (`vertexai.reasoning_engines._utils.generate_schema`).
+- The A2aAgent methods annotate parameters with **forward-reference strings**
+  (`'SendMessageRequest'`, `'ServerCallContext'`). The a2a-sdk request types
+  are **protobuf messages** (`a2a.types.a2a_pb2`, no pydantic schema), and the
+  gRPC context type is opaque — so `pydantic.create_model(...).schema()` raises
+  `PydanticSchemaGenerationError`, the SDK catches it and `continue`s, and the
+  engine deploys with **zero registered operations**.
+- `model_rebuild()` (suggested by the error) does not exist on the protobuf
+  classes (`AttributeError: model_rebuild`) — the hint assumes a pydantic model.
+
+**Resolution**
+- `app/deploy_a2a.py` now calls `_make_a2a_operations_registrable(a2a_agent)`
+  before `ReasoningEngine.create()`:
+  - resolves each `on_*` method's string annotations to the real classes
+    (`a2a.types.<Name>`), falling back to `object` for opaque types;
+  - attaches `__get_pydantic_core_schema__` (emitting an unconstrained
+    `core_schema.any_schema()`) to the protobuf request classes;
+- Verified locally: `_generate_class_methods_spec_or_raise` returns **9
+  operations** (`on_message_send`, `on_get_task`, `on_list_tasks`,
+  `on_cancel_task`, plus the push-notification config ops and
+  `on_get_extended_agent_card`).
+
+**Lesson:** a successful `ReasoningEngine.create()` does not mean the A2A
+operations registered. Check the deploy log for `failed to generate schema`
+warnings and verify the card is reachable after deploy.
+
+---
+
 ## Quick map: error → fix
 
 | Error / symptom | Root cause | Fix | Where |
 |---|---|---|---|
-| `cannot import name 'McpToolset'` | `mcp 2.0.0` incompatible with ADK 2.6.2 | pin `mcp>=1.24,<2`, re-lock | planner `pyproject.toml` |
+| `cannot import name 'MCPToolset'` | `mcp 2.0.0` incompatible with ADK 2.6.2 | pin `mcp>=1.24,<2`, re-lock | planner `pyproject.toml` |
 | `payload size exceeds ... 8388608` | `.venv` (341 MB) packaged | `.gitignore` excludes `.venv/` etc. | planner `.gitignore` |
 | `'${PORT:-8080}' is not a valid integer` | exec-form CMD doesn't expand vars | shell-form CMD | planner `Dockerfile` |
 | A2A card 404 at `api/a2a/app` | wrong passthrough path | use `api/a2a/financial_planner` | — (URL) |
-| `401` on card's advertised URL | card advertises internal host | rewrite URL to passthrough base | supervisor tool |
-| `Invalid enum value user` / `message_id required` | protobuf-backed JSON-RPC | a2a-sdk typed `Message`/`Role.ROLE_USER` | supervisor tool |
+| `401` on card's advertised URL | card advertises internal host | rewrite URL to passthrough base | supervisor tool (historical) |
+| `Invalid enum value user` / `message_id required` | protobuf-backed JSON-RPC | a2a-sdk typed `Message`/`Role.ROLE_USER` | supervisor tool (historical) |
 | `403 Forbidden` on planner passthrough | supervisor SA lacks IAM on planner | `roles/aiplatform.user` on SA | GCP IAM |
 | `404 ...agent-card.json%20` | trailing space in env var | `.strip()` the URL | supervisor tool |
-| tool returned "no answer" | text in `artifact_update` vs `task.history` | collect from both | supervisor tool |
+| tool returned "no answer" | text in `artifact_update` vs `task.history` | collect from both | supervisor tool (historical) |
+| Model B card 404 / `failed to generate schema` | protobuf request types break schema gen → 0 registered ops | `_make_a2a_operations_registrable()` in `deploy_a2a.py` | planner `app/deploy_a2a.py` |
 
 ---
 
 ## What was *verified working* (so docs reflect reality)
 
-1. Planner agent imports and FastAPI app boots on Agent Runtime.
-2. Planner's A2A card is live at the passthrough (`.../api/a2a/financial_planner/.well-known/agent-card.json`).
-3. Full A2A message round-trip to the planner returns a real LLM answer.
-4. Supervisor deployed with the a2a-sdk tool + `FINANCIAL_PLANNER_URL`.
-5. **End-to-end**: question → supervisor passthrough → `call_financial_planner`
-   → planner passthrough → planner answer → back to the user.
+1. Planner agent imports and boots.
+2. Planner deployed to Agent Engine as an `A2aAgent` (Model B) with **9 A2A
+   operations registered** (`on_message_send` etc.) — verified via
+   `_generate_class_methods_spec_or_raise` returning all 9.
+3. Planner's A2A card is live at the Model B passthrough
+   (`.../v1beta1/.../a2a/.well-known/agent-card.json`).
+4. Supervisor deployed with the `financial_planner` `RemoteA2aAgent` sub-agent
+   + `FINANCIAL_PLANNER_URL`.
+5. **End-to-end**: question → supervisor → `financial_planner` sub-agent →
+   planner A2A passthrough → planner answer → back to the user.

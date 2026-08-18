@@ -8,10 +8,15 @@ version = "0.1.0"
 description = "GEAP Financial Planning agent — goals-based planning via A2A"
 requires-python = ">=3.11"
 dependencies = [
-    "google-adk[gcp,db,a2a]",
-    "google-cloud-aiplatform[agent_engines,adk]",
+    # Pin ADK/genai/aiplatform to the versions verified working with Vertex
+    # (2.6.2 / 2.17.0 / 1.163.0). Newer aiplatform (1.164+) enables the
+    # JSON_SCHEMA_FOR_FUNC_DECL feature which sends `part_metadata` that
+    # Gemini Enterprise Agent Platform rejects ("only supported in Gemini
+    # Developer API mode").
+    "google-adk[gcp,db,a2a]==2.6.2",
+    "google-cloud-aiplatform[agent_engines,adk]==1.163.0",
     "google-cloud-firestore",
-    "google-genai",
+    "google-genai==2.17.0",
     "python-dotenv",
     "a2a-sdk",
     "fastapi",

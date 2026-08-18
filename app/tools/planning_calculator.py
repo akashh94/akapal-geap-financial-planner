@@ -182,11 +182,13 @@ def retirement_projection(
         except ValueError:
             # Withdrawals never deplete the balance (returns outpace spending).
             months = float("inf")
-    years_nest_egg_lasts = months if months == float("inf") else months / 12.0
+    # "Never depletes" (inf) is not JSON-serializable — ADK converts tool
+    # results to the model via JSON, and Infinity breaks that. Use a large
+    # finite sentinel (≈83 years) for the wire value.
+    never_depletes = months == float("inf")
+    years_nest_egg_lasts = 999.0 if never_depletes else months / 12.0
     retirement_span = max(0, life_expectancy - retirement_age)
-    sustainable = (
-        years_nest_egg_lasts == float("inf") or years_nest_egg_lasts >= retirement_span
-    )
+    sustainable = never_depletes or years_nest_egg_lasts >= retirement_span
 
     return {
         "balance_at_retirement": balance_at_retirement,

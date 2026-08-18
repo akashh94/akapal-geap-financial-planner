@@ -24,29 +24,24 @@ sequenceDiagram
     actor User
     participant UI as Chat UI
     participant Sup as Supervisor (geap_agent)
-    participant Tool as call_financial_planner tool
-    participant Cli as a2a-sdk client (in-tool)
-    participant Card as Planner agent-card (passthrough)
-    participant Planner as Planner container (Agent Runtime)
+    participant Sub as financial_planner sub-agent<br/>(RemoteA2aAgent)
+    participant Card as Planner agent-card (Model B passthrough)
+    participant Planner as Planner A2aAgent (Agent Engine)
     participant Calc as Planner LlmAgent + calculator tools
 
     User->>UI: "Can I retire in 10 years if I save $1,000/mo?"
     UI->>Sup: forward question
-    Sup->>Sup: decide: financial-planning → use tool
-    Sup->>Tool: call_financial_planner(request)
+    Sup->>Sup: decide: financial-planning → delegate to sub-agent
+    Sup->>Sub: financial_planner(query)
 
-    Tool->>Cli: build a2a-sdk ClientFactory + Bearer auth
-    Cli->>Card: GET <engine>/api/a2a/financial_planner/.well-known/agent-card.json
-    Card-->>Cli: agent card (skills, capabilities)
-    Cli->>Cli: rewrite card url → public passthrough base
-
-    Cli->>Planner: JSON-RPC SendMessage (A2A-Version: 1.0, Bearer token)
+    Sub->>Card: GET <engine>/v1beta1/.../a2a/.well-known/agent-card.json
+    Card-->>Sub: agent card (skills, capabilities)
+    Sub->>Planner: JSON-RPC SendMessage (A2A-Version: 1.0, Bearer token)
     Planner->>Calc: A2aAgentExecutor runs the LlmAgent
     Calc->>Calc: calls future_value / retirement_projection / MCP tools
     Calc-->>Planner: text answer
-    Planner-->>Cli: JSON-RPC response (task + artifacts)
-    Cli-->>Tool: collects text parts → string
-    Tool-->>Sup: tool result string
+    Planner-->>Sub: JSON-RPC response (task + artifacts)
+    Sub-->>Sup: answer text
     Sup->>Sup: formulate final answer
     Sup-->>UI: "Based on your savings, here's the projection…"
     UI-->>User: show answer
@@ -118,92 +113,111 @@ sequenceDiagram
 
 ---
 
-## 3. Deployment model B — Vertex AI Agent Engine / Agent Runtime
+## 3. Deployment model B — Vertex AI Agent Engine / Agent Runtime (current)
 
-When both agents are deployed with `deployment_target: agent_runtime`, the
-planner's container serves A2A routes internally (`/a2a/financial_planner`),
-and **Agent Engine exposes them publicly over its HTTP passthrough** at:
+The planner is deployed to **Vertex AI Agent Engine as an `A2aAgent` (Model B)**
+via `app/deploy_a2a.py` (`ReasoningEngine.create()` with the
+`vertexai.agent_engines.templates.a2a.A2aAgent` wrapper). Agent Engine hosts the
+agent card natively and proxies the container's `/a2a/financial_planner` routes
+publicly at:
 
 ```
-https://<location>-aiplatform.googleapis.com/reasoningEngines/v1/
-  projects/<project>/locations/<location>/reasoningEngines/<id>/
-  api/a2a/financial_planner/.well-known/agent-card.json
+https://<location>-aiplatform.googleapis.com/v1beta1/
+  projects/<project>/locations/<location>/reasoningEngines/<id>/a2a
 ```
 
-The JSON-RPC base is the same path without the card suffix
-(`.../api/a2a/financial_planner`).
+The card is fetched at `.../a2a/.well-known/agent-card.json`, and the JSON-RPC
+base is `.../a2a`.
 
 ```mermaid
 flowchart LR
-    subgraph AgentEngine["Vertex AI Agent Runtime"]
-        PlanAgent["Planner container<br/>(FastAPI + A2aAgentExecutor)"]
+    subgraph AgentEngine["Vertex AI Agent Engine"]
+        PlanAgent["A2aAgent (pickled)<br/>on_message_send etc."]
     end
-    Sup["Supervisor LlmAgent<br/>(deployed, geap_agent)"] -->|"a2a-sdk client<br/>Bearer token"| PT["Agent Engine HTTP passthrough<br/>/api/a2a/financial_planner"]
+    Sup["Supervisor LlmAgent<br/>(deployed, geap_agent)"] -->|"RemoteA2aAgent<br/>Bearer token"| PT["Agent Engine native A2A<br/>/v1beta1/.../a2a"]
     PT --> PlanAgent
     PlanAgent -->|"tools: calculator, MCP portfolio"| Tools["Vertex AI resources"]
 ```
 
 Key facts — verified against the deployed planner (2026-08):
 
-- The **container** serves the A2A card and JSON-RPC at `/a2a/financial_planner`
-  (your FastAPI `attach_a2a_routes` code — unchanged between self-hosted and
-  Agent Runtime).
-- **Agent Engine proxies that path publicly** under
-  `.../reasoningEngines/v1/{resource}/api/a2a/<agent_directory>`. The
-  `agent_directory` is `app` (the manifest value), and the route under it is
-  the container's `rpc_path` (`financial_planner`).
-- **The card advertises the container's internal URL**
-  (`http://reasoning-engine-<id>-<hash>-<region>.a.run.app/...`), which is not
-  directly reachable. Clients must **rewrite the card's interface URL to the
-  public passthrough base** — the supervisor's `call_financial_planner` tool
-  does this.
+- The **`A2aAgent` template** serves the A2A protocol natively (JSON-RPC over
+  the platform passthrough), and the engine's agent card is hosted at
+  `.../a2a/.well-known/agent-card.json`.
+- The supervisor's `financial_planner` sub-agent is an ADK
+  **`RemoteA2aAgent`** (`geap_agent/app/agents/financial_planner_agent.py`) that
+  fetches the card lazily with an authenticated `httpx` client and sends JSON-RPC
+  through it — no URL rewriting needed, because the card's advertised URL is the
+  public passthrough.
 - **Auth** is a Google OAuth Bearer token from ambient credentials
   (`google.auth.default()`), scoped to cloud-platform.
 - The card is publicly fetchable through the passthrough (no
   `handle_authenticated_agent_card()` needed for this deployment path).
+
+### Known issue: A2A operation registration with current SDK versions
+
+`google-cloud-aiplatform`'s `ReasoningEngine.create()` registers the
+`A2aAgent`'s `on_*` methods by generating a pydantic schema for each. The
+a2a-sdk request types (`SendMessageRequest`, `GetTaskRequest`, ...) are
+**protobuf messages**, and the gRPC `ServerCallContext` is opaque, so schema
+generation fails and the engine deploys with **zero registered operations**
+(the card 404s). `app/deploy_a2a.py` works around this in
+`_make_a2a_operations_registrable()`: it resolves the methods' string
+annotations to the real protobuf classes, attaches
+`__get_pydantic_core_schema__` (emitting an unconstrained core schema), and maps
+anything else to `object`. Revisit when aiplatform supports protobuf-typed A2A
+methods natively.
 
 ### Implication for the contextvar fix
 
 ```mermaid
 flowchart TD
     Q{Deployment target?}
-    Q -->|agent_runtime / Agent Engine| H["Card url rewritten client-side<br/>to the passthrough base"]
+    Q -->|agent_runtime / Agent Engine| H["Card url is the public passthrough<br/>no rewriting needed (RemoteA2aAgent)"]
     Q -->|self-hosted FastAPI| C["Contextvar per-request host rewrite<br/>needed for correct card url"]
 ```
 
 **Bottom line:** the contextvar change in this repo is correct and harmless for
 Agent Engine (the passthrough card is what clients consume), and *necessary*
-for the self-hosted path. On the supervisor side, the client-side URL rewrite
-in `a2a_planner_tool.py` is what makes the Agent Runtime card usable.
+for the self-hosted path. On the supervisor side, `RemoteA2aAgent` uses the
+card's advertised URL directly — the Model B passthrough card is already
+public.
 
 ---
 
-## 4. The supervisor's client — from `RemoteA2aAgent` to the a2a-sdk client
+## 4. The supervisor's client — `RemoteA2aAgent` (current design)
 
-The original design used ADK's `RemoteA2aAgent` (an ADK agent wrapper that does
-HTTP card fetch + JSON-RPC through an internal runner). That approach cannot
-reach an Agent Engine passthrough because:
+The supervisor consumes the planner through ADK's **`RemoteA2aAgent`**
+(`geap_agent/app/agents/financial_planner_agent.py`), wired as the
+`financial_planner` sub-agent. It:
 
-- It performs **unauthenticated** HTTP card fetch and JSON-RPC — the passthrough
-  requires a Bearer token.
-- It uses the card's advertised URL verbatim — which is the container's
-  **internal** URL, not reachable from the supervisor.
-
-The current `app/tools/a2a_planner_tool.py` therefore uses the **a2a-sdk
-client** directly:
+- takes the planner's agent-card URL (`FINANCIAL_PLANNER_URL`) and resolves the
+  card lazily on first use;
+- authenticates with a Bearer token from ambient credentials
+  (`google.auth.default()`) via its `httpx_client`;
+- sends JSON-RPC `SendMessage` through the card's advertised URL — which, for
+  a Model B deployment, is the public passthrough base, so **no URL rewriting
+  is needed**.
 
 ```mermaid
 flowchart LR
-    Tool[call_financial_planner] --> Auth[google.auth Bearer token]
+    Agent[financial_planner sub-agent<br/>RemoteA2aAgent] --> Auth[google.auth Bearer token]
     Auth --> Fetch[httpx GET agent card]
-    Fetch --> Parse[parse_agent_card]
-    Parse --> Rewrite[rewrite interface url → passthrough base]
-    Rewrite --> Send[ClientFactory → send_message]
-    Send --> Collect[collect artifact + task text parts]
+    Fetch --> Parse[parse AgentCard]
+    Parse --> Send[httpx POST JSON-RPC SendMessage]
+    Send --> Collect[collect text parts]
 ```
 
-It is still wrapped as an ADK `FunctionTool`, so the supervisor LLM calls it
-exactly as before.
+The planner is stateless by design: `full_history_when_stateless=True` keeps
+follow-up planning questions independent.
+
+> **Historical note:** an earlier design used a custom `call_financial_planner`
+> `FunctionTool` with the a2a-sdk client + passthrough URL rewrite
+> (`app/tools/a2a_planner_tool.py`, since deleted). It was replaced because
+> `RemoteA2aAgent` is the ADK-native way to delegate to a remote A2A agent and
+> matches the Model B passthrough (whose card URL needs no rewriting). The
+> a2a-sdk client remains the right tool if you ever need finer control over the
+> A2A conversation (streaming, task lifecycle).
 
 ---
 
@@ -251,11 +265,11 @@ sequenceDiagram
 
 ## 6. Quick reference
 
-| Concern | Self-hosted FastAPI | Agent Engine / Agent Runtime |
+| Concern | Self-hosted FastAPI | Agent Engine / Agent Runtime (Model B) |
 |---|---|---|
-| A2A transport | HTTP JSON-RPC `SendMessage` | HTTP JSON-RPC via passthrough (`/api/a2a/...`) |
-| Agent card | Served at `/.well-known/agent-card.json` | Passthrough card at `.../api/a2a/<dir>/.well-known/agent-card.json` |
-| Card URL source | Embedded in card at startup | Passthrough URL; card's internal url must be rewritten client-side |
+| A2A transport | HTTP JSON-RPC `SendMessage` | HTTP JSON-RPC via native passthrough (`/v1beta1/.../a2a`) |
+| Agent card | Served at `/.well-known/agent-card.json` | Passthrough card at `.../a2a/.well-known/agent-card.json` |
+| Card URL source | Embedded in card at startup | Passthrough URL is already public — no rewrite needed |
 | Auth | None (add middleware) | Bearer token from ambient credentials |
-| Serving surface | Your FastAPI app | Platform proxies your FastAPI container |
-| Client (supervisor) | a2a-sdk client | a2a-sdk client + passthrough URL rewrite |
+| Serving surface | Your FastAPI app | Agent Engine hosts the `A2aAgent` natively |
+| Client (supervisor) | a2a-sdk client | ADK `RemoteA2aAgent` sub-agent |

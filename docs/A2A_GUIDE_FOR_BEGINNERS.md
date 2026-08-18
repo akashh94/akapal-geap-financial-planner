@@ -32,53 +32,52 @@ it were a service**. Think of it as "HTTP + JSON for agents".
 flowchart LR
     subgraph ClientSide["Supervisor side (geap_agent)"]
         LLM["Supervisor LLM (orchestrator)"]
-        Tool["call_financial_planner (FunctionTool)"]
-        Cli["a2a-sdk client<br/>(in-tool, Bearer auth)"]
+        Sub["financial_planner sub-agent<br/>(RemoteA2aAgent)"]
+        Cli["ADK RemoteA2aAgent client<br/>(Bearer auth)"]
     end
     subgraph Wire["A2A wire (HTTPS + JSON-RPC)"]
         Card["GET agent-card.json<br/>discovery"]
-        RPC["POST .../api/a2a/financial_planner<br/>SendMessage"]
+        RPC["POST .../v1beta1/.../a2a<br/>SendMessage"]
     end
     subgraph ServerSide["Planner side (this repo)"]
-        FastAPI["FastAPI container<br/>DefaultRequestHandler"]
+        A2a["A2aAgent (Agent Engine)<br/>on_message_send"]
         Exec["A2aAgentExecutor"]
         PlannerAgent["Financial planner LlmAgent<br/>Gemini + calculator tools + MCP"]
     end
 
-    LLM -->|"decides: planning question"| Tool
-    Tool -->|"builds a2a-sdk client"| Cli
+    LLM -->|"decides: planning question"| Sub
+    Sub -->|"builds A2A client"| Cli
     Cli --> Card
     Card --> RPC
-    RPC --> FastAPI
-    FastAPI --> Exec
+    RPC --> A2a
+    A2a --> Exec
     Exec --> PlannerAgent
 ```
 
 **Client side — the supervisor (`geap_agent`)**
 
-- Exposes a `call_financial_planner` tool — a normal ADK `FunctionTool`.
-- Inside the tool, uses the **a2a-sdk client** (`ClientFactory` +
-  `send_message`) to talk A2A directly — no ADK agent wrapper involved.
+- Exposes a `financial_planner` sub-agent — an ADK **`RemoteA2aAgent`**.
+- Inside, ADK's built-in A2A client talks A2A directly (no custom tool code).
 - Authenticates with a **Google Bearer token** from the ambient credentials
   (`google.auth.default()`), which the Agent Engine passthrough requires.
 - Knows where the planner lives via `FINANCIAL_PLANNER_URL`, which points at
-  the planner's agent-card URL on the Agent Engine passthrough.
+  the planner's agent-card URL on the Agent Engine passthrough
+  (`.../reasoningEngines/<id>/a2a/.well-known/agent-card.json`).
 
 **Server side — the planner (this repo)**
 
-- A FastAPI container that wires up A2A routes at startup
-  (`attach_a2a_routes` in `app/app_utils/a2a.py`).
-- Exposes two relevant endpoints (served both directly and, when deployed to
-  Agent Runtime, through the platform's HTTP passthrough):
+- Deployed to **Agent Engine as an `A2aAgent`** (Model B) via
+  `app/deploy_a2a.py` — the platform serves the A2A protocol natively.
+- Exposes the A2A endpoints through the platform's passthrough:
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/a2a/financial_planner/.well-known/agent-card.json` | GET | The agent card (discovery) |
-| `/a2a/financial_planner` | POST | The JSON-RPC endpoint (needs an `A2A-Version: 1.0` header) |
+| `.../a2a/.well-known/agent-card.json` | GET | The agent card (discovery) |
+| `.../a2a` | POST | The JSON-RPC endpoint (needs an `A2A-Version: 1.0` header) |
 
 - Internally bridges incoming A2A calls to ADK's `Runner` via
   `A2aAgentExecutor`, which runs the actual `financial_planner` `LlmAgent`
-  (Gemini + 6 calculator tools + optional MCP portfolio tools).
+  (Gemini + 6 calculator tools + MCP portfolio tools).
 
 ---
 
@@ -91,32 +90,30 @@ sequenceDiagram
     autonumber
     actor User
     participant Sup as Supervisor LLM
-    participant Tool as call_financial_planner
-    participant Cli as a2a-sdk client
+    participant Sub as financial_planner sub-agent<br/>(RemoteA2aAgent)
+    participant Cli as ADK A2A client
     participant Card as Planner agent-card (passthrough)
-    participant API as Planner container
+    participant API as Planner A2aAgent (Agent Engine)
     participant Exec as A2aAgentExecutor
     participant Agent as Planner LlmAgent + tools
 
     User->>Sup: "Can I retire in 10 years if I save $1,000/mo?"
-    Sup->>Sup: prompt routes planning questions to the tool
-    Sup->>Tool: call_financial_planner(request)
+    Sup->>Sup: prompt routes planning questions to the sub-agent
+    Sup->>Sub: financial_planner(request)
 
-    Tool->>Cli: build ClientFactory + Bearer token
+    Sub->>Cli: build authenticated A2A client
     Cli->>Card: GET .../.well-known/agent-card.json
     Card-->>Cli: name, skills, capabilities
-    Cli->>Cli: rewrite card url → passthrough base
-
     Cli->>API: JSON-RPC SendMessage (A2A-Version: 1.0)
-    API->>Exec: DefaultRequestHandler creates task, runs executor
+    API->>Exec: creates task, runs executor
     Exec->>Agent: converts A2A parts → ADK content, runs LlmAgent
     Agent->>Agent: calls retirement_projection / n_periods / MCP tools
     Agent-->>Exec: text answer
     Exec-->>API: ADK events → A2A events (working → completed)
     API-->>Cli: JSON-RPC response (task + message parts)
 
-    Cli-->>Tool: collects text parts → string
-    Tool-->>Sup: tool result string
+    Cli-->>Sub: collects text parts → answer
+    Sub-->>Sup: answer text
     Sup-->>User: "Based on your savings, here's the projection…"
 ```
 
@@ -126,25 +123,26 @@ sequenceDiagram
 
 ### Step 1 — The supervisor decides to delegate
 The user's question enters the supervisor LLM. Its prompt routes
-financial-planning questions to the `call_financial_planner` tool, so the LLM
-calls it with the question as the argument.
+financial-planning questions to the `financial_planner` sub-agent, so the LLM
+delegates to it with the question as the argument.
 
-### Step 2 — The tool builds an A2A client
+### Step 2 — The sub-agent builds an A2A client
 ```python
-headers = _auth_headers()  # Bearer token from google.auth
-card = await fetch_agent_card()  # httpx GET of FINANCIAL_PLANNER_URL
-# The card advertises the container's internal URL — rewrite it to the
-# public Agent Engine passthrough base before sending.
-for interface in card.supported_interfaces:
-    interface.url = rpc_base
-client = ClientFactory(ClientConfig(...)).create(card)
+# geap_agent/app/agents/financial_planner_agent.py (simplified)
+financial_planner = RemoteA2aAgent(
+    name="financial_planner",
+    agent_card=_planner_card_url(),  # FINANCIAL_PLANNER_URL
+    httpx_client=httpx.AsyncClient(headers=_auth_headers()),  # Bearer token
+    full_history_when_stateless=True,
+)
 ```
-The tool talks A2A directly through the a2a-sdk client — no `RemoteA2aAgent`,
-no internal ADK runner. Each call uses a fresh `message_id`, so the planner
-stays stateless.
+ADK's `RemoteA2aAgent` resolves the card lazily on first use and talks A2A
+directly through its authenticated `httpx` client. The Model B passthrough
+card's advertised URL is already public — no rewriting needed. Each call uses a
+fresh message/task, so the planner stays stateless.
 
 ### Step 3 — Client fetches the agent card
-The tool does an HTTP GET on `FINANCIAL_PLANNER_URL` with the Bearer token.
+The sub-agent does an HTTP GET on `FINANCIAL_PLANNER_URL` with the Bearer token.
 The card returns: name `financial_planner`, capabilities, and one *skill* per
 tool (`financial_planner-retirement_projection`, etc.). This is the "how do I
 talk to you" discovery step.
@@ -167,9 +165,9 @@ with the message parts), carried back in the JSON-RPC response. (If the client
 had asked for streaming via `SendStreamingMessage`, the server would reply with
 a Server-Sent Events stream instead.)
 
-### Step 7 — Tool result → supervisor answer
-The tool collects the text parts from the task's artifacts and history, joins
-them, and returns a plain string — that string is the tool result the
+### Step 7 — Answer → supervisor answer
+The sub-agent collects the text parts from the task's artifacts and history,
+joins them, and returns a plain string — that string is the answer the
 supervisor LLM sees, and it phrases the final answer to the user.
 
 ---
@@ -179,33 +177,31 @@ supervisor LLM sees, and it phrases the final answer to the user.
 ```mermaid
 flowchart TD
     U["User"] --> S["Supervisor (orchestrator LLM)"]
-    S -->|"calls tool"| T["call_financial_planner (FunctionTool)"]
-    T -->|"a2a-sdk client + Bearer token"| C["Discovery (GET agent card)"]
-    C -->|"POST JSON-RPC SendMessage"| P["Planner container / passthrough"]
+    S -->|"delegates"| T["financial_planner sub-agent<br/>(RemoteA2aAgent)"]
+    T -->|"ADK A2A client + Bearer token"| C["Discovery (GET agent card)"]
+    C -->|"POST JSON-RPC SendMessage"| P["Planner A2aAgent (Agent Engine)"]
     P --> E["A2aAgentExecutor"]
     E --> A["LlmAgent → calculator/MCP tools"]
     A -->|"text answer"| E
     E -->|"JSON-RPC response"| T
-    T -->|"tool result string"| S
+    T -->|"answer text"| S
     S -->|"final answer"| U
 ```
 
 Things worth internalizing:
 
 - **A2A is just HTTP + JSON-RPC + a discovery card.** Everything between the
-  a2a-sdk client (supervisor side) and `DefaultRequestHandler` (planner side)
-  is standard wire protocol, so either side could be any framework — not just
-  ADK.
+  ADK A2A client (supervisor side) and the planner's executor is standard wire
+  protocol, so either side could be any framework — not just ADK.
 - **The conversion layers** (ADK content ↔ A2A message parts) exist because ADK
   has its own internal message model, separate from the A2A spec. That's what
   the `convert_genai_part_to_a2a_part` warnings are about.
 - **The planner is stateless by design** — each call gets a fresh task, so
   follow-up questions start clean (no planner-side memory between calls).
-- **Deployment note:** on Vertex AI Agent Runtime, Agent Engine proxies the
-  container's `/a2a/financial_planner` routes publicly under
-  `.../api/a2a/<agent_dir>` — but the card advertises the container's internal
-  URL, so the client must rewrite it to the passthrough base. The supervisor's
-  tool does this automatically.
+- **Deployment note:** on Vertex AI Agent Engine (Model B), the planner runs as
+  an `A2aAgent` and the platform serves the card natively at
+  `.../reasoningEngines/<id>/a2a/.well-known/agent-card.json`. The card's
+  advertised URL is already public, so no client-side rewriting is needed.
 
 ---
 
@@ -215,8 +211,7 @@ Things worth internalizing:
   models, protocol edge cases, and the calculator sign-convention fix.
 - [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) — every error hit and resolved
   during deployment, explained from first principles.
-- `app/app_utils/a2a.py` — the planner's server-side A2A wiring
-  (`attach_a2a_routes`, agent-card builder, URL-rewrite middleware).
-- `app/fast_api_app.py` — where A2A routes are attached at startup.
-- `geap_agent/app/tools/a2a_planner_tool.py` — the supervisor's client-side
-  tool (a2a-sdk client + passthrough URL rewrite).
+- `app/deploy_a2a.py` — the planner's Model B deployment script (A2aAgent
+  wrapper + `ReasoningEngine.create()`).
+- `geap_agent/app/agents/financial_planner_agent.py` — the supervisor's
+  client-side `RemoteA2aAgent` sub-agent.

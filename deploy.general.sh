@@ -16,7 +16,9 @@ unset VIRTUAL_ENV
 
 # Office environment config (self-contained): PROJECT_ID / REGION / AGENT_MODEL /
 # MODEL_LOCATION / MCP_PORTFOLIO_URL all come from geap.deploy.env — the
-# single source of truth for the office deployment.
+# single source of truth for the office deployment. Note: the general env
+# file still points MCP_PORTFOLIO_URL at an old SSE endpoint; update it to the
+# Streamable HTTP /mcp URL before deploying this target.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/geap.deploy.env"
 

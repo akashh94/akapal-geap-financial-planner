@@ -6,7 +6,7 @@ import os
 from google.adk.agents import LlmAgent
 from google.adk.tools import BaseTool, FunctionTool
 from google.adk.tools.base_toolset import BaseToolset
-from google.adk.tools.mcp_tool import McpToolset, SseConnectionParams
+from google.adk.tools.mcp_tool import MCPToolset, StreamableHTTPConnectionParams
 
 from app.config.models import build_model
 from app.prompts.planner_prompt import PLANNER_PROMPT
@@ -24,10 +24,13 @@ _calc_tools = [
 ]
 
 _tools: list[BaseTool | BaseToolset] = list(_calc_tools)
-if mcp_url := os.getenv("MCP_PORTFOLIO_URL"):
+if mcp_url := os.getenv(
+    "MCP_PORTFOLIO_URL",
+    "https://mcp-portfolio-947331501288.us-central1.run.app/mcp",
+):
     _tools.append(
-        McpToolset(
-            connection_params=SseConnectionParams(
+        MCPToolset(
+            connection_params=StreamableHTTPConnectionParams(
                 url=mcp_url,
                 timeout=10.0,
             ),
