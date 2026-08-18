@@ -16,9 +16,11 @@ unset VIRTUAL_ENV
 
 # Office environment config (self-contained): PROJECT_ID / REGION / AGENT_MODEL /
 # MODEL_LOCATION / MCP_PORTFOLIO_URL all come from geap.deploy.env — the
-# single source of truth for the office deployment. Note: the general env
-# file still points MCP_PORTFOLIO_URL at an old SSE endpoint; update it to the
-# Streamable HTTP /mcp URL before deploying this target.
+# single source of truth for the office deployment.
+#
+# NOTE: the planner is deployed via Model A (Cloud Run) —
+# ./deploy.general.cloudrun.sh is the active path. This Model B
+# (agent_runtime) script is kept for reference only.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/geap.deploy.env"
 
