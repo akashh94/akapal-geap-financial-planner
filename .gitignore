@@ -33,3 +33,6 @@ deploy.personal.cloudrun.sh
 # Model B (deprecated — Model A / Cloud Run is the live path)
 deploy_model_b.sh
 deployment_metadata.json
+
+# ADK dev server runtime state
+.adk/
