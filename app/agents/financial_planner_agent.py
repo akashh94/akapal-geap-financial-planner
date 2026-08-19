@@ -6,8 +6,8 @@ import os
 from google.adk.agents import LlmAgent
 from google.adk.tools import BaseTool, FunctionTool
 from google.adk.tools.base_toolset import BaseToolset
-from google.adk.tools.mcp_tool import MCPToolset, StreamableHTTPConnectionParams
 
+from app.app_utils.api_registry_mcp import build_portfolio_mcp_toolset
 from app.config.models import build_model
 from app.prompts.planner_prompt import PLANNER_PROMPT
 from app.tools import planning_calculator
@@ -24,22 +24,13 @@ _calc_tools = [
 ]
 
 _tools: list[BaseTool | BaseToolset] = list(_calc_tools)
-if mcp_url := os.getenv(
-    "MCP_PORTFOLIO_URL",
-    "",
-):
-    _tools.append(
-        MCPToolset(
-            connection_params=StreamableHTTPConnectionParams(
-                url=mcp_url,
-                timeout=10.0,
-            ),
-        )
-    )
+if os.getenv("MCP_REGISTRY_SERVER") or os.getenv("MCP_PORTFOLIO_URL"):
+    _tools.append(build_portfolio_mcp_toolset())
 else:
     logger.warning(
-        "MCP_PORTFOLIO_URL is not set — portfolio data tools are disabled. "
-        "The planner will answer without live portfolio context."
+        "Neither MCP_REGISTRY_SERVER nor MCP_PORTFOLIO_URL is set — "
+        "portfolio data tools are disabled. The planner will answer without "
+        "live portfolio context."
     )
 
 financial_planner_agent = LlmAgent(

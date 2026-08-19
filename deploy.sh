@@ -4,7 +4,7 @@
 #
 # Sources geap.deploy.env for PROJECT_ID / REGION / ARTIFACT_REGISTRY /
 # ARTIFACT_REGION / SERVICE_NAME / APP_URL and the runtime env vars
-# (AGENT_MODEL, MODEL_LOCATION, MCP_PORTFOLIO_URL).
+# (AGENT_MODEL, MODEL_LOCATION, MCP_PORTFOLIO_URL, MCP_REGISTRY_*).
 #
 # The planner serves A2A at /a2a/financial_planner (card at the standard
 # /.well-known/agent-card.json path). APP_URL must be the public https URL so
@@ -42,7 +42,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --port 8080 \
   --min-instances 1 \
   --max-instances 1 \
-  --update-env-vars "AGENT_MODEL=${AGENT_MODEL},MODEL_LOCATION=${MODEL_LOCATION},MCP_PORTFOLIO_URL=${MCP_PORTFOLIO_URL},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},APP_URL=${APP_URL}"
+  --update-env-vars "AGENT_MODEL=${AGENT_MODEL},MODEL_LOCATION=${MODEL_LOCATION},MCP_PORTFOLIO_URL=${MCP_PORTFOLIO_URL},MCP_REGISTRY_PROJECT_ID=${MCP_REGISTRY_PROJECT_ID},MCP_REGISTRY_LOCATION=${MCP_REGISTRY_LOCATION},MCP_REGISTRY_SERVER=${MCP_REGISTRY_SERVER},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},APP_URL=${APP_URL}"
 
 SERVICE_URL="https://${SERVICE_NAME}-$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)').${REGION}.run.app"
 echo "Deployed: ${SERVICE_URL}"

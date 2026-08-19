@@ -651,7 +651,7 @@ source = { editable = "." }
 dependencies = [
     { name = "a2a-sdk" },
     { name = "fastapi" },
-    { name = "google-adk", extra = ["a2a", "db", "gcp"] },
+    { name = "google-adk", extra = ["a2a", "agent-identity", "db", "gcp"] },
     { name = "google-cloud-aiplatform", extra = ["adk", "agent-engines"] },
     { name = "google-cloud-firestore" },
     { name = "google-genai" },
@@ -674,7 +674,7 @@ requires-dist = [
     { name = "a2a-sdk" },
     { name = "codespell", marker = "extra == 'lint'" },
     { name = "fastapi" },
-    { name = "google-adk", extras = ["gcp", "db", "a2a"], specifier = "==2.6.2" },
+    { name = "google-adk", extras = ["gcp", "db", "a2a", "agent-identity"], specifier = "==2.6.2" },
     { name = "google-cloud-aiplatform", extras = ["agent-engines", "adk"], specifier = "==1.163.0" },
     { name = "google-cloud-firestore" },
     { name = "google-genai", specifier = "==2.17.0" },
@@ -833,6 +833,10 @@ wheels = [
 a2a = [
     { name = "a2a-sdk" },
 ]
+agent-identity = [
+    { name = "google-cloud-agentidentitycredentials" },
+    { name = "google-cloud-iamconnectorcredentials" },
+]
 db = [
     { name = "sqlalchemy" },
     { name = "sqlalchemy-spanner" },
@@ -902,6 +906,22 @@ pyopenssl = [
 ]
 requests = [
     { name = "requests" },
+]
+
+[[package]]
+name = "google-cloud-agentidentitycredentials"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/35/d3/76b4ef28c11d2a27a9d191de6b898862e48f789a1b20a44256d9adcf0e9e/google_cloud_agentidentitycredentials-0.1.1.tar.gz", hash = "sha256:b747b1a91582472636b78e0ecc11132088704fd89bd490ef127600bc2e695992", size = 93960, upload-time = "2026-08-06T06:24:03.395Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d3/d2/648965e5836581719b9fc3d2c37f1469d166c119f2804f30ec82afbd0bde/google_cloud_agentidentitycredentials-0.1.1-py3-none-any.whl", hash = "sha256:2a53478c846c64b7d1af78d7fb4515ce62b22ac5ac4247c1246552e282f0bf0e", size = 101123, upload-time = "2026-08-06T06:22:54.771Z" },
 ]
 
 [[package]]
@@ -1122,6 +1142,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/16/d8/ebea2eb4423ee467a50ed7b91ab0a1a0e0749f869151598891456a117a8f/google_cloud_iam-2.24.1.tar.gz", hash = "sha256:2d7edfe48fd24a181f55473a77584c0c947cf52915fc7af835d9ae0408fccae0", size = 561397, upload-time = "2026-08-06T06:24:26.45Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a4/98/11d466009ffdf7abc987d9db8d6a59bbbb2c08543fd9ee4d98514bafbdc4/google_cloud_iam-2.24.1-py3-none-any.whl", hash = "sha256:7122aca0f5e2aa5bac889ff8136629054e9eef761d14dc5111ac1d109f68052a", size = 515093, upload-time = "2026-08-06T06:23:18.659Z" },
+]
+
+[[package]]
+name = "google-cloud-iamconnectorcredentials"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth" },
+    { name = "grpcio" },
+    { name = "proto-plus" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/56/01/9678b0f674e6beb18cc76dfa3d0a9da5b7eb433567bd68a08a8fe2a9d604/google_cloud_iamconnectorcredentials-0.1.1.tar.gz", hash = "sha256:269438ce79f5826e09e45919022881291da8e22293d009d5bd9dd346448d4ddb", size = 55341, upload-time = "2026-06-22T23:21:32.405Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/21/e30bcd57445883e9c7452431346891fd76eae4a03d2e6fc0ee088131a70f/google_cloud_iamconnectorcredentials-0.1.1-py3-none-any.whl", hash = "sha256:0f69103a80eb8df5a52d1c595e51927d83e3383d35515f1d07bc88ed67fee6bc", size = 57609, upload-time = "2026-06-22T23:19:16.866Z" },
 ]
 
 [[package]]

@@ -13,7 +13,7 @@ dependencies = [
     # JSON_SCHEMA_FOR_FUNC_DECL feature which sends `part_metadata` that
     # Gemini Enterprise Agent Platform rejects ("only supported in Gemini
     # Developer API mode").
-    "google-adk[gcp,db,a2a]==2.6.2",
+    "google-adk[gcp,db,a2a,agent-identity]==2.6.2",
     "google-cloud-aiplatform[agent_engines,adk]==1.163.0",
     "google-cloud-firestore",
     "google-genai==2.17.0",
