@@ -23,23 +23,36 @@ _calc_tools = [
     FunctionTool(planning_calculator.savings_goal_projection),
 ]
 
-_tools: list[BaseTool | BaseToolset] = list(_calc_tools)
-if os.getenv("MCP_REGISTRY_SERVER") or os.getenv("MCP_PORTFOLIO_URL"):
-    _tools.append(build_portfolio_mcp_toolset())
-else:
-    logger.warning(
-        "Neither MCP_REGISTRY_SERVER nor MCP_PORTFOLIO_URL is set — "
-        "portfolio data tools are disabled. The planner will answer without "
-        "live portfolio context."
+
+def build_financial_planner_agent() -> LlmAgent:
+    """Build the planner agent with calculators and the portfolio MCP toolset.
+
+    The MCP toolset's ``get_tools()`` is async and must be awaited inside a
+    running event loop — not at module import (``asyncio.run()`` fails when a
+    loop is already running, e.g. FastAPI startup). The toolset is included
+    as-is here; the FastAPI lifespan flattens it into concrete tools for the
+    A2A executor, which does not surface toolsets.
+    """
+    tools: list[BaseTool | BaseToolset] = list(_calc_tools)
+    if os.getenv("MCP_REGISTRY_SERVER") or os.getenv("MCP_PORTFOLIO_URL"):
+        tools.append(build_portfolio_mcp_toolset())
+    else:
+        logger.warning(
+            "Neither MCP_REGISTRY_SERVER nor MCP_PORTFOLIO_URL is set — "
+            "portfolio data tools are disabled. The planner will answer "
+            "without live portfolio context."
+        )
+
+    return LlmAgent(
+        name="financial_planner",
+        model=build_model(),
+        description=(
+            "Goals-based financial planning: retirement readiness, savings targets, "
+            "cash-flow, and affordability projections."
+        ),
+        instruction=PLANNER_PROMPT,
+        tools=tools,
     )
 
-financial_planner_agent = LlmAgent(
-    name="financial_planner",
-    model=build_model(),
-    description=(
-        "Goals-based financial planning: retirement readiness, savings targets, "
-        "cash-flow, and affordability projections."
-    ),
-    instruction=PLANNER_PROMPT,
-    tools=_tools,
-)
+
+financial_planner_agent = build_financial_planner_agent()
