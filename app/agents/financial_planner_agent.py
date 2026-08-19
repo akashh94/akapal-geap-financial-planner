@@ -26,7 +26,7 @@ _calc_tools = [
 _tools: list[BaseTool | BaseToolset] = list(_calc_tools)
 if mcp_url := os.getenv(
     "MCP_PORTFOLIO_URL",
-    "https://mcp-portfolio-947331501288.us-central1.run.app/mcp",
+    "",
 ):
     _tools.append(
         MCPToolset(
