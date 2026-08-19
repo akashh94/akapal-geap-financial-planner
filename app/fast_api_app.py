@@ -11,10 +11,7 @@ from google.adk.cli.fast_api import get_fast_api_app
 from google.adk.runners import Runner
 
 from app.app_utils import services
-from app.app_utils.a2a import (
-    attach_a2a_routes,
-    install_request_base_url_middleware,
-)
+from app.app_utils.a2a import attach_a2a_routes
 
 load_dotenv()
 
@@ -72,6 +69,5 @@ app: FastAPI = get_fast_api_app(
     lifespan=lifespan,
     gemini_enterprise_app_name="app",
 )
-install_request_base_url_middleware(app)
 app.title = "financial-planner"
 app.description = "API for interacting with the Agent financial-planner"
