@@ -4,10 +4,11 @@ import logging
 import os
 
 from google.adk.agents import LlmAgent
-from google.adk.tools import BaseTool, FunctionTool
+from google.adk.tools import BaseTool, FunctionTool, load_memory, preload_memory
 from google.adk.tools.base_toolset import BaseToolset
 
 from app.app_utils.api_registry_mcp import build_portfolio_mcp_toolset
+from app.app_utils.memory_callbacks import save_session_to_memory_callback
 from app.config.models import build_model
 from app.prompts.planner_prompt import PLANNER_PROMPT
 from app.tools import planning_calculator
@@ -51,7 +52,8 @@ def build_financial_planner_agent() -> LlmAgent:
             "cash-flow, and affordability projections."
         ),
         instruction=PLANNER_PROMPT,
-        tools=tools,
+        tools=tools + [preload_memory, load_memory],
+        after_agent_callback=save_session_to_memory_callback,
     )
 
 
