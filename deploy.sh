@@ -33,6 +33,12 @@ docker push "$IMAGE"
 # Cloud Run injects PORT; the app binds 0.0.0.0.
 # --allow-unauthenticated: the A2A card + JSON-RPC are public. The supervisor
 # still authenticates to Vertex AI with its own Bearer token for model calls.
+EXPORTED_VARS="AGENT_MODEL=${AGENT_MODEL},MODEL_LOCATION=${MODEL_LOCATION},MCP_PORTFOLIO_URL=${MCP_PORTFOLIO_URL},MCP_REGISTRY_PROJECT_ID=${MCP_REGISTRY_PROJECT_ID},MCP_REGISTRY_LOCATION=${MCP_REGISTRY_LOCATION},MCP_REGISTRY_SERVER=${MCP_REGISTRY_SERVER},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},APP_URL=${APP_URL}"
+# Pass MEMORY_BANK_ID only when set (an empty value fails the deploy).
+if [ -n "${MEMORY_BANK_ID:-}" ]; then
+  EXPORTED_VARS="${EXPORTED_VARS},MEMORY_BANK_ID=${MEMORY_BANK_ID}"
+fi
+
 gcloud run deploy "$SERVICE_NAME" \
   --image "$IMAGE" \
   --project "$PROJECT_ID" \
@@ -42,7 +48,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --port 8080 \
   --min-instances 1 \
   --max-instances 1 \
-  --update-env-vars "AGENT_MODEL=${AGENT_MODEL},MODEL_LOCATION=${MODEL_LOCATION},MCP_PORTFOLIO_URL=${MCP_PORTFOLIO_URL},MCP_REGISTRY_PROJECT_ID=${MCP_REGISTRY_PROJECT_ID},MCP_REGISTRY_LOCATION=${MCP_REGISTRY_LOCATION},MCP_REGISTRY_SERVER=${MCP_REGISTRY_SERVER},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=${REGION},APP_URL=${APP_URL}"
+  --update-env-vars "$EXPORTED_VARS"
 
 SERVICE_URL="https://${SERVICE_NAME}-$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)').${REGION}.run.app"
 echo "Deployed: ${SERVICE_URL}"
