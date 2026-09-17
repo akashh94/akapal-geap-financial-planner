@@ -19,8 +19,10 @@ from google.adk.tools.base_toolset import BaseToolset
 
 logger = logging.getLogger(__name__)
 
-#: Default Streamable HTTP URL for local development (no registry).
-_DEFAULT_LOCAL_MCP_URL = "https://mcp-portfolio-947331501288.us-central1.run.app/mcp"
+#: Neutral placeholder for the direct Streamable HTTP URL. Real deployments set
+#: MCP_PORTFOLIO_URL (or MCP_REGISTRY_SERVER); this must never carry a real
+#: project host, so one image works in every environment.
+_DEFAULT_LOCAL_MCP_URL = "http://localhost:8080/mcp"
 
 
 def _build_registry_toolset() -> BaseToolset:

@@ -25,6 +25,10 @@ from app.a2a_app import a2a_agent
 PROJECT_ID = os.environ["GOOGLE_CLOUD_PROJECT"]
 REGION = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
 
+# Required for the object deploy: Agent Runtime stages the pickled agent, the
+# requirements file and any dependency files under this bucket.
+STAGING_BUCKET = os.environ["STAGING_BUCKET"]
+
 ENV_VARS = {
     key: os.environ[key]
     for key in (
@@ -39,16 +43,29 @@ ENV_VARS = {
     if os.environ.get(key)
 }
 
-# Pinned to the versions verified working against Vertex. 1.164+ re-enables
-# JSON_SCHEMA_FOR_FUNC_DECL, which sends part_metadata that Gemini Enterprise
-# Agent Platform rejects.
+# Mirrors the repo's pyproject runtime set, so the deployed container matches
+# the environment the entrypoint is verified against. pydantic and cloudpickle
+# are required by the SDK's object-deploy packaging.
 REQUIREMENTS = [
-    "google-cloud-aiplatform[agent_engines]==1.163.0",
-    "google-adk[a2a]==2.6.2",
+    "google-adk[gcp,db,a2a,agent-identity]==2.6.2",
+    "google-cloud-aiplatform[agent_engines,adk]==1.163.0",
+    "google-cloud-firestore",
     "google-genai==2.17.0",
+    "python-dotenv",
     "a2a-sdk",
+    "fastapi",
+    "uvicorn[standard]",
+    "sse-starlette",
     "mcp>=1.24,<2",
+    "pydantic",
+    "cloudpickle",
 ]
+
+# The object deploy only ships the pickle and requirements by default, so the
+# `app` package must be bundled explicitly — otherwise the container fails with
+# "No module named 'app.a2a_app'" because the pickled references to
+# build_runner / build_agent_executor cannot be resolved.
+EXTRA_PACKAGES = ["app"]
 
 client = vertexai.Client(
     project=PROJECT_ID,
@@ -64,6 +81,8 @@ remote = client.agent_engines.create(
             "Goals-based financial planning agent exposed over A2A on Agent Runtime."
         ),
         "requirements": REQUIREMENTS,
+        "extra_packages": EXTRA_PACKAGES,
+        "staging_bucket": STAGING_BUCKET,
         "env_vars": ENV_VARS,
         "min_instances": 1,
         "max_instances": 1,
