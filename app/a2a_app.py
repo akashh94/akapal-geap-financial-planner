@@ -120,4 +120,10 @@ a2a_agent = A2aAgent(
     ),
     agent_executor_builder=build_agent_executor,
 )
+# set_up() rewrites the card's interface URL from GOOGLE_CLOUD_AGENT_ENGINE_ID,
+# which is absent at build time — so the stored card advertises
+# .../reasoningEngines/test-agent-engine/a2a. Agent Platform SDK clients are
+# unaffected: the SDK rewrites that URL from the engine's resource name before
+# connecting (`vertexai/_genai/_agent_engines_utils.py`). Only something reading
+# the authenticated card directly would see the placeholder.
 a2a_agent.set_up()
