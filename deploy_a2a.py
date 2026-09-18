@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 
-import vertexai
+import agentplatform
 from google.genai import types
 
 from app.a2a_app import a2a_agent
@@ -67,34 +67,58 @@ REQUIREMENTS = [
 # build_runner / build_agent_executor cannot be resolved.
 EXTRA_PACKAGES = ["app"]
 
-client = vertexai.Client(
+client = agentplatform.Client(
     project=PROJECT_ID,
     location=REGION,
     http_options=types.HttpOptions(api_version="v1beta1"),
 )
 
-remote = client.agent_engines.create(
-    agent=a2a_agent,
-    config={
-        "display_name": "akapal-financial-planner",
-        "description": (
-            "Goals-based financial planning agent exposed over A2A on Agent Runtime."
-        ),
-        "requirements": REQUIREMENTS,
-        "extra_packages": EXTRA_PACKAGES,
-        "staging_bucket": STAGING_BUCKET,
-        "env_vars": ENV_VARS,
-        "min_instances": 1,
-        "max_instances": 1,
-    },
-)
+DISPLAY_NAME = "akapal-financial-planner"
+
+CONFIG = {
+    "display_name": DISPLAY_NAME,
+    "description": (
+        "Goals-based financial planning agent exposed over A2A on Agent Runtime."
+    ),
+    "requirements": REQUIREMENTS,
+    "extra_packages": EXTRA_PACKAGES,
+    "staging_bucket": STAGING_BUCKET,
+    "env_vars": ENV_VARS,
+    "min_instances": 1,
+    "max_instances": 1,
+}
+
+# Update the existing engine instead of creating another one: the supervisor
+# holds this resource name in FINANCIAL_PLANNER_ENGINE, so a brand-new engine on
+# every deploy silently invalidates that value.
+matches = [
+    engine.api_resource.name
+    for engine in client.agent_engines.list(
+        config={"filter": f'display_name="{DISPLAY_NAME}"'}
+    )
+]
+
+if len(matches) > 1:
+    raise SystemExit(
+        f"{len(matches)} engines named {DISPLAY_NAME!r} already exist:\n  "
+        + "\n  ".join(matches)
+        + "\n\nDelete the superseded ones and re-run, so this deploy updates a "
+        "single engine rather than one the supervisor may not be calling."
+    )
+
+if matches:
+    remote = client.agent_engines.update(
+        name=matches[0], agent=a2a_agent, config=CONFIG
+    )
+    action = "Updated"
+else:
+    remote = client.agent_engines.create(agent=a2a_agent, config=CONFIG)
+    action = "Created"
 
 resource_name = remote.api_resource.name
 a2a_base = f"https://{REGION}-aiplatform.googleapis.com/v1beta1/{resource_name}/a2a"
 
-print(f"A2A engine : {resource_name}")
-print(f"A2A base   : {a2a_base}")
-print(f"A2A card   : {a2a_base}/v1/card")
-print(
-    "\nPoint the supervisor's FINANCIAL_PLANNER_ENGINE at the resource name above."
-)
+print(f"{action} engine : {resource_name}")
+print(f"A2A base    : {a2a_base}")
+print(f"A2A card    : {a2a_base}/v1/card")
+print("\nFINANCIAL_PLANNER_ENGINE keeps this value across deploys.")
