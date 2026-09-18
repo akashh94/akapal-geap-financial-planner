@@ -1,7 +1,7 @@
 """Agent Runtime A2A entrypoint for the financial planner.
 
 Built on the documented Agent Runtime A2A template
-(``vertexai.agent_engines.templates.a2a.A2aAgent``). The platform owns the A2A
+(``agentplatform.agent_engines.templates.a2a.A2aAgent``). The platform owns the A2A
 surface — ``on_message_send`` / ``on_get_task`` / ``on_cancel_task`` under
 ``{engine}/a2a/v1/...`` — and the authenticated card at ``{engine}/a2a/v1/card``.
 Agent Runtime deliberately serves no public ``.well-known`` card.
@@ -13,10 +13,10 @@ import logging
 import os
 
 from a2a.types import AgentSkill
+from agentplatform.agent_engines.templates.a2a import A2aAgent, create_agent_card
 from google.adk.a2a.executor.a2a_agent_executor import A2aAgentExecutor
 from google.adk.runners import Runner
 from google.adk.tools.base_toolset import BaseToolset
-from vertexai.agent_engines.templates.a2a import A2aAgent, create_agent_card
 
 from app.agents.financial_planner_agent import build_financial_planner_agent
 from app.app_utils import services
@@ -120,6 +120,6 @@ a2a_agent = A2aAgent(
 # which is absent at build time — so the stored card advertises
 # .../reasoningEngines/test-agent-engine/a2a. Agent Platform SDK clients are
 # unaffected: the SDK rewrites that URL from the engine's resource name before
-# connecting (`vertexai/_genai/_agent_engines_utils.py`). Only something reading
+# connecting (`agentplatform/_genai/_agent_engines_utils.py`). Only something reading
 # the authenticated card directly would see the placeholder.
 a2a_agent.set_up()
