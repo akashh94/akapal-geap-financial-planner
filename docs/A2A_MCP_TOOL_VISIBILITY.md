@@ -7,7 +7,7 @@ returns:
 
 > "I'm sorry, I was unable to get an answer from the financial planner."
 
-The planner's Cloud Run logs show, for every A2A `SendMessage`:
+The planner's logs show, for every A2A `SendMessage`:
 
 ```
 ERROR Error handling A2A request: Tool 'get_account_summary' not found.
@@ -81,8 +81,9 @@ surfaced in the deployed container.
    exposes `build_financial_planner_agent()`, which attaches the toolset as a
    placeholder (no `asyncio.run`).
 
-2. **Resolve it inside the running event loop.** `fast_api_app.py`'s lifespan
-   (an async context, so `await` is legal) flattens the toolset:
+2. **Resolve it inside the running event loop.** `a2a_app.py`'s async
+   `build_runner()` (an async context, so `await` is legal) flattens the
+   toolset:
 
    ```python
    agent = build_financial_planner_agent()
@@ -95,7 +96,7 @@ surfaced in the deployed container.
    executor sees `get_account_summary` etc. The dedup filter prevents listing
    the tools twice (once prefixed by the toolset, once flattened).
 
-3. **IAM:** the planner's Cloud Run service account needed
+3. **IAM:** the planner's runtime service account needed
    `roles/agentregistry.viewer` to resolve the registered MCP server from the
    Agent Registry (the supervisor's runtime SA needed the same grant).
 
@@ -115,10 +116,10 @@ The agent card now advertises all 15 skills (6 calculators + 9 MCP tools).
 
 - **Toolsets are lazy and async.** `McpToolset.get_tools()` must be awaited in
   an async context; never call `asyncio.run()` inside a running event loop
-  (FastAPI startup, uvicorn, etc.).
+  (Agent Runtime startup, etc.).
 - **A2A executor surfaces tools, not toolsets.** If you need A2A clients to
   call toolset-backed tools, flatten the toolset into concrete tools before
   building the agent.
 - **Reproduce in the real runtime.** A bug that passes locally (CLI, no
-  event loop) can fail in the container (FastAPI lifespan). Always check the
-  deployed logs for warnings like "coroutine ... never awaited".
+  event loop) can fail in the container (Agent Runtime startup). Always check
+  the deployed logs for warnings like "coroutine ... never awaited".

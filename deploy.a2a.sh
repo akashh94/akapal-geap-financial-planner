@@ -8,9 +8,6 @@
 # supervisor reaches this engine through the Agent Platform SDK rather than by
 # fetching a card.
 #
-# The Cloud Run deployment (deploy.personal.cloudrun.sh) is unaffected — the
-# two can run side by side, which is the rollback path.
-#
 # Sources geap.deploy.env for the office project's values.
 
 set -euo pipefail

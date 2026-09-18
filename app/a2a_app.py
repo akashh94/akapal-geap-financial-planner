@@ -5,9 +5,6 @@ Built on the documented Agent Runtime A2A template
 surface — ``on_message_send`` / ``on_get_task`` / ``on_cancel_task`` under
 ``{engine}/a2a/v1/...`` — and the authenticated card at ``{engine}/a2a/v1/card``.
 Agent Runtime deliberately serves no public ``.well-known`` card.
-
-The Cloud Run path (``app/fast_api_app.py`` + ``app/app_utils/a2a.py``) is
-untouched and keeps working; this module is the Agent Runtime alternative.
 """
 
 from __future__ import annotations
@@ -76,8 +73,7 @@ async def build_runner() -> Runner:
     * module-level so the deployed ``A2aAgent`` pickles this as a by-reference
       callable (a lambda would be serialized by value);
     * async so the MCP toolset's ``get_tools()`` can be awaited inside the
-      running event loop. It cannot be awaited at import time, which is the
-      same constraint ``app/fast_api_app.py`` solves in its FastAPI lifespan.
+      running event loop. It cannot be awaited at import time.
     """
     agent = build_financial_planner_agent()
 
