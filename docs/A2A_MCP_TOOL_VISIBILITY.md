@@ -110,7 +110,10 @@ The A2A retirement question now returns `TASK_STATE_COMPLETED`:
 4. `retirement_projection` → `balance_at_retirement: 654094.29, sustainable: true`
 5. Answer: "~$654,094.29 nest egg, sustainable well beyond age 85"
 
-The agent card now advertises all 15 skills (6 calculators + 9 MCP tools).
+On the app-served path this also made the agent card advertise all 15 skills
+(6 calculators + 9 MCP tools). That path has since been removed: the native
+`A2aAgent` advertises three hand-written skills and serves no public card, but
+the flattening above is still what makes the MCP tools callable.
 
 ## Key takeaways
 
