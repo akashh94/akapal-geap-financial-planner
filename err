@@ -57,3 +57,22 @@ In favour of the service agent being the runtime identity
   This matters practically: granting roles to the wrong principal is the most common way to spend an afternoon on an IAM problem that was never
   IAM. Given we already know the office supervisor is in us-east1 and the office planner landed in us-central1, I'd still check the region and
   the PLACEHOLDER engine id before adding any grant at all.
+
+  {
+  "textPayload": "[17]      INFO:     Sending out request, model: gemini-2.5-flash, backend: GoogleLLMVariant.VERTEX_AI, stream: False",
+  "insertId": "6ab123900003d458e98c5e88",
+  "resource": {
+    "type": "aiplatform.googleapis.com/ReasoningEngine",
+    "labels": {
+      "location": "us-east1",
+      "reasoning_engine_id": "2727065913814679552",
+      "resource_container": "492310803820"
+    }
+  },
+  "timestamp": "2026-09-21T12:31:12.250968Z",
+  "labels": {
+    "service.version": "2"
+  },
+  "logName": "projects/labs-gcp-msls-16495-1782829337/logs/aiplatform.googleapis.com%2Freasoning_engine_stderr",
+  "receiveTimestamp": "2026-09-21T12:31:12.382173250Z"
+}
