@@ -11,3 +11,49 @@ The account making the GET request from your container is your Runtime Service A
 If you did not specify a custom service account during deployment, this is always the Compute Engine default service account:
 
 Runtime Account: 492310803820-compute@developer.gserviceaccount.com
+
+
+In favour of the service agent being the runtime identity
+
+  - The ReasoningEngine spec's effective_identity field is documented as "the identity to use for the Reasoning Engine", and it enumerates the
+  possible forms. The first is service-{project}@gcp-sa-aiplatform-re.googleapis.com — explicitly labelled "for SERVICE_AGENT identity type".
+  The <something>-compute@developer.gserviceaccount.com form is listed under a different type, SERVICE_ACCOUNT — meaning it would be reported
+  differently, and only if you had configured one.
+  - Your engines report the SERVICE_AGENT form. So the effective identity in the spec is the -re P4SA.
+  - I searched the whole SDK for <NUMBER>-compute@developer.gserviceaccount.com, and it appears only in pipeline-job and prompt-optimizer
+  configs (service_account_project_number), plus a Vertex Pipelines workaround — not in ReasoningEngine identity fields. So "the default is
+  always the compute default SA" holds for pipelines, which is a different surface.
+  - Your own AGENT_RUNTIME_A2A.md tells you to grant roles/agentregistry.viewer to
+  service-<PROJECT_NUMBER>@gcp-sa-aiplatform-re.iam.gserviceaccount.com so the planner can resolve its MCP server at runtime. That instruction
+  only works if that account is the container's identity.
+
+  Where the err file has a real point
+
+  The distinction it's reaching for exists, just with different principals: Google's deploy docs say the Agent Platform Service Agent —
+  service-<PROJECT_NUMBER>@gcp-sa-aiplatform.iam.gserviceaccount.com, note no -re — is used to fetch secrets at deployment time, while "your 
+  configured agent identity is used at runtime." So there genuinely are two accounts in play; they're just not the two the file names. Its
+  "security boundary" claim is also stated without a source, and it doesn't account for Agent Runtime being a managed-container platform where
+  your code is deliberately run on Google's infrastructure.
+
+  I'm not certain enough to have you act on it — and neither should the file convince you. Two ways to settle it definitively:
+
+  # 1. Who actually got denied? The audit log names the principal.
+    gcloud logging read \
+      'protoPayload.serviceName="aiplatform.googleapis.com" AND protoPayload.status.code=7' \
+      --project=labs-gcp-msls-16495-1782829337 --limit=10 \
+      --format='value(timestamp, protoPayload.methodName, protoPayload.authenticationInfo.principalEmail)'
+
+  code 7 is PERMISSION_DENIED, and principalEmail is the answer — no interpretation needed. (If Admin Activity logging doesn't surface it, the
+  fallback is option 2.)
+
+  # 2. Ask the container directly, in a2a_planner_tool._client()
+    import google.auth
+    creds, _ = google.auth.default()
+    print("runtime identity:", getattr(creds, "service_account_email", None))
+
+  That prints what ADC actually resolves to inside the supervisor — the precise thing in dispute. It's also worth keeping permanently as a
+  startup log line, because this whole class of problem is invisible otherwise.
+
+  This matters practically: granting roles to the wrong principal is the most common way to spend an afternoon on an IAM problem that was never
+  IAM. Given we already know the office supervisor is in us-east1 and the office planner landed in us-central1, I'd still check the region and
+  the PLACEHOLDER engine id before adding any grant at all.
